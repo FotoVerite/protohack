@@ -30,10 +30,10 @@ pub async fn handle_is_prime(socket: &mut TcpStream) -> anyhow::Result<()> {
             return Err(anyhow::anyhow!("method is not isPrime"));
         }
         let prime = match req.number {
-            Number::Int(i) => isPrime(i),
+            Number::Int(i) => is_prime(i),
             Number::Float(f) => {
                 if f.fract() == 0.0 {
-                    isPrime(f as u64)
+                    is_prime(f as u64)
                 } else {
                     false
                 }
@@ -49,7 +49,7 @@ pub async fn handle_is_prime(socket: &mut TcpStream) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn isPrime(i: u64) -> bool {
+fn is_prime(i: u64) -> bool {
     if i < 2 {
         return false;
     }

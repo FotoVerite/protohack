@@ -1,0 +1,10 @@
+#[derive(Debug, PartialEq)]
+pub struct Ticket {
+    pub plate: String,
+    pub road: u16,
+    pub mile1: u16,
+    pub timestamp1: u32,
+    pub mile2: u16,
+    pub timestamp2: u32,
+    pub speed: u16,
+}

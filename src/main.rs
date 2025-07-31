@@ -1,14 +1,16 @@
 pub mod chat;
 pub mod handle_is_prime;
 pub mod handle_mte;
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+pub mod database_server;
 
-use crate::chat::handle_chat::handle_chat;
+use std::{collections::HashMap, sync::Arc};
+
+use prime_time::road::{handle_road::handle_road, plate::PlateStorage};
 use tokio::{
     net::TcpListener,
-    sync::{Mutex, broadcast},
+    sync::Mutex,
 };
-use tracing::{error, info};
+use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -16,18 +18,18 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter("my_server=debug,tokio=info")
         .init();
-    let (tx, _rx) = broadcast::channel::<(SocketAddr, String)>(100);
-    let sender = Arc::new(tx);
-    let users = Arc::new(Mutex::new(HashMap::new()));
+    let plate_storage = Arc::new(Mutex::new(PlateStorage::new()));
+        let dispatchers = Arc::new(Mutex::new(HashMap::new()));
+
     loop {
         let (socket, addr) = listener.accept().await?;
-        let handler_tx = sender.clone();
-        let handler_users = users.clone();
+        let plate_storage_clone = plate_storage.clone();
+        let dispatchers_clone = dispatchers.clone();
         info!("new connection from {}", addr);
         // Spawn a new async task to handle the connection
         tokio::spawn(async move {
             println!("Connection started for {}", addr);
-            if let Err(e) = handle_chat(socket, &handler_tx, handler_users).await {
+            if let Err(e) = handle_road(socket, dispatchers_clone, plate_storage_clone, ).await {
                 eprintln!("Connection {} ended with error: {:?}", addr, e);
             } else {
                 println!("Connection {} ended cleanly", addr);
@@ -35,3 +37,14 @@ async fn main() -> anyhow::Result<()> {
         });
     }
 }
+// async fn main() -> anyhow::Result<()> {
+//     tracing_subscriber::fmt()
+//         .with_env_filter("my_server=debug,tokio=info")
+//         .init();
+//     let storage: Arc<Mutex<Storage>> = Arc::new(Mutex::new(HashMap::new()));
+//     database_server::run_udp_server("0.0.0.0:3030", storage).await?;
+//     Ok(())
+    
+// }
+
+

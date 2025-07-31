@@ -84,7 +84,7 @@ impl ChatSession {
 
         let writer_task = {
             let shutdown_clone = shutdown.clone();
-            tokio::spawn(async move { write_task(writer, rx, peer, shutdown_clone).await })
+            tokio::spawn(async move { write_task(writer, rx, peer).await })
         };
 
         // FIXED: Wait for BOTH tasks to complete before exiting
@@ -142,7 +142,6 @@ async fn write_task(
     mut writer: SplitSink<Framed<TcpStream, LinesCodec>, String>,
     mut rx: Receiver<(SocketAddr, String)>,
     peer: SocketAddr,
-    shutdown: CancellationToken,
 ) -> anyhow::Result<()> {
     println!("Writer task started for {}", peer);
 

@@ -83,7 +83,6 @@ impl ChatSession {
         };
 
         let writer_task = {
-            let shutdown_clone = shutdown.clone();
             tokio::spawn(async move { write_task(writer, rx, peer).await })
         };
 

@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDate};
 
 use crate::road::{camera::Camera, ticket::Ticket};
 
-type Result = anyhow::Result<Option<Ticket>>;
+type Result = anyhow::Result<Vec<Ticket>>;
 
 pub struct PlateStorage {
     plates: HashMap<String, PlateState>,
@@ -44,33 +44,47 @@ impl PlateState {
         }
     }
 
-    pub fn update(&mut self, timestamp: u32, camera: &Camera) -> Result {
+    pub fn update(&mut self, timestamp: u32, camera: &Camera) -> anyhow::Result<Vec<Ticket>> {
+        println!("adding sighting {} for {:?}", timestamp, camera);
         let sightings_on_road = self.sightings.entry(camera.road).or_insert(BTreeMap::new());
         sightings_on_road.insert(timestamp, camera.clone());
-        let ticket = self.has_ticket_for_road(&camera.road, &timestamp)?;
-        if let Some(found_ticket) = &ticket {
-            let date = to_date(found_ticket.timestamp2.clone());
-            if self.ticketed_dates.contains(&date) {
-                return Ok(None);
-            }
-            self.ticketed_dates.insert(date);
-        }
-        Ok(ticket)
+        let tickets = self.has_ticket_for_road(&camera.road, &timestamp)?;
+        let actionable_tickets = tickets
+            .iter()
+            .filter_map(|ticket| {
+                let start_date = to_date(ticket.timestamp1.clone());
+                let end_date = to_date(ticket.timestamp2.clone());
+
+                if self.ticketed_dates.contains(&start_date)
+                    || self.ticketed_dates.contains(&end_date)
+                {
+                    return None;
+                }
+
+                self.ticketed_dates.insert(start_date);
+                self.ticketed_dates.insert(end_date);
+
+                Some(ticket.clone())
+            })
+            .collect();
+        Ok(actionable_tickets)
     }
 
     pub fn has_ticket_for_road(
         &mut self,
         road: &u16,
         timestamp: &u32,
-    ) -> Result {
+    ) -> anyhow::Result<Vec<Ticket>> {
+        let mut tickets = vec![];
+
         if let Some(sightings) = self.sightings.get(&road) {
             let sighting = match sightings.get(timestamp) {
                 Some(cam) => cam,
-                None => return Ok(None), // or error?
+                None => return Ok(vec![]), // or error?
             };
             let (prev, next) = neighbors(sightings, timestamp.clone());
             if let Some((prev_timestamp, camera)) = prev {
-                if camera.speeding(prev_timestamp, &sighting, &timestamp) {
+                if let Some(speed) = camera.speeding(prev_timestamp, &sighting, &timestamp) {
                     let ticket = Ticket {
                         plate: self.name.clone(),
                         road: *road,
@@ -78,13 +92,13 @@ impl PlateState {
                         mile1: camera.location,
                         timestamp2: *timestamp,
                         mile2: sighting.location,
-                        speed: sighting.limit,
+                        speed: speed * 100,
                     };
-                    return Ok(Some(ticket));
+                    tickets.push(ticket);
                 }
             }
             if let Some((next_timestamp, camera)) = next {
-                if sighting.speeding(timestamp, camera, next_timestamp) {
+                if let Some(speed) = sighting.speeding(timestamp, camera, next_timestamp) {
                     let ticket = Ticket {
                         plate: self.name.clone(),
                         road: *road,
@@ -92,13 +106,13 @@ impl PlateState {
                         mile1: sighting.location,
                         timestamp2: *next_timestamp,
                         mile2: camera.location,
-                        speed: camera.limit,
+                        speed: speed * 100,
                     };
-                    return Ok(Some(ticket));
+                    tickets.push(ticket);
                 }
             }
         }
-        Ok(None)
+        Ok(tickets)
     }
 }
 

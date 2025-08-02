@@ -61,7 +61,6 @@ mod tests {
         tx: Arc<broadcast::Sender<(SocketAddr, String)>>,
         rx: broadcast::Receiver<(SocketAddr, String)>,
         writer: SplitSink<Framed<TcpStream, LinesCodec>, String>,
-        reader: SplitStream<Framed<TcpStream, LinesCodec>>,
         peer_addr: SocketAddr,
     }
 
@@ -70,9 +69,9 @@ mod tests {
             let users = Arc::new(Mutex::new(HashMap::new()));
             let (tx, rx) = broadcast::channel(10);
             let tx = Arc::new(tx);
-            let (writer, reader, peer_addr) = Self::create_mock_connection().await;
+            let (writer, _, peer_addr) = Self::create_mock_connection().await;
             
-            Self { users, tx, rx, writer, reader, peer_addr }
+            Self { users, tx, rx, writer, peer_addr }
         }
 
         async fn create_mock_connection() -> (
@@ -115,10 +114,6 @@ mod tests {
 
         fn try_recv_broadcast(&mut self) -> Result<(SocketAddr, String), broadcast::error::TryRecvError> {
             self.rx.try_recv()
-        }
-
-        async fn read_announcement(&mut self) -> String {
-            self.reader.next().await.unwrap().unwrap()
         }
 
         fn system_addr() -> SocketAddr {

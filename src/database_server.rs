@@ -1,7 +1,7 @@
-use std::{collections::HashMap, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use tokio::{net::UdpSocket, sync::Mutex};
-use tracing::{error, info};
+use tracing::info;
 
 pub type Storage = HashMap<String, String>;
 

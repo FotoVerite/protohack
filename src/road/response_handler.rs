@@ -10,9 +10,8 @@ pub async fn response_handler(
     mut rx: Receiver<RespValue>,
 ) -> anyhow::Result<()> {
     while let Some(msg) = rx.recv().await {
-        println!("sending {:?}", msg);
-        if let Err(e) = writer.send(msg).await.context("Failed to send response") {
-            eprintln!("Writer error ({}), shutting down response handler", e);
+        if let Err(e) = writer.send(msg.clone()).await.context("Failed to send response") {
+            eprintln!("Writer error ({}), shutting down response handler for msg: {:?}", e, msg);
             break;
         }
     }

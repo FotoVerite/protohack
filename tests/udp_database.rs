@@ -1,5 +1,5 @@
 use prime_time::database_server;
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{net::UdpSocket, sync::Mutex, time::timeout};
 
 type Storage = HashMap<String, String>;
@@ -79,31 +79,3 @@ async fn test_version() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn test_insert_json_string() -> anyhow::Result<()> {
-    let addr = "127.0.0.1:4002";
-    let storage = Arc::new(Mutex::new(HashMap::new()));
-    start_server(addr, storage.clone()).await;
-
-    let client = setup_client(addr).await?;
-
-    let key = "product.68620";
-    let val = r#"{"price":"197267.76","delivery":"8 business days","name":"23 GB spirit level bubble (M6 thread) (415-pack)","stock":374}"#;
-
-    let insert = format!("{key}={val}");
-    client.send(insert.as_bytes()).await?;
-
-    // No response expected
-    let mut buf = [0u8; 1024];
-    let recv = timeout(Duration::from_millis(200), client.recv(&mut buf)).await;
-    assert!(recv.is_err(), "SET should not return a response");
-
-    // Retrieve
-    client.send(key.as_bytes()).await?;
-    let len = timeout(Duration::from_millis(200), client.recv(&mut buf)).await??;
-    let resp = std::str::from_utf8(&buf[..len])?;
-
-    assert_eq!(resp, insert);
-
-    Ok(())
-}

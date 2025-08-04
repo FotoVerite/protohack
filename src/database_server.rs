@@ -7,7 +7,13 @@ pub type Storage = HashMap<String, String>;
 
 pub async fn run_udp_server(addr: &str, storage: Arc<Mutex<Storage>>) -> anyhow::Result<()> {
     let socket = UdpSocket::bind(addr).await?;
+    run_udp_server_with_socket(socket, storage).await
+}
 
+pub async fn run_udp_server_with_socket(
+    socket: UdpSocket,
+    storage: Arc<Mutex<Storage>>,
+) -> anyhow::Result<()> {
     loop {
         // recv_from returns (len, sender addr)
         let mut buf = [0u8; 1000];

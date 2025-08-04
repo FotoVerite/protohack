@@ -15,5 +15,5 @@ pub mod heartbeat;
 pub mod road_dispatcher;
 
 //type FramedType = Framed<TcpListener>;
-type RoadDispatchers = Arc<Mutex<HashMap<u16, RoadDispatcher>>>;
-type Plates = Arc<Mutex<PlateStorage>>;
+pub type RoadDispatchers = Arc<Mutex<HashMap<u16, RoadDispatcher>>>;
+pub type Plates = Arc<Mutex<PlateStorage>>;

@@ -16,3 +16,4 @@ chrono = { version = "0.4.41", features = ["alloc"] }
 
 [dev-dependencies]
 similar = "2.1"
+tracing-test = "0.2"

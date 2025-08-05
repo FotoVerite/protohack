@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, bail};
 use tokio_util::{
     bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},

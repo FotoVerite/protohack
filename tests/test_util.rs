@@ -1,7 +1,8 @@
+#[warn(dead_code)]
+
 use tokio::net::TcpStream;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, WriteHalf, ReadHalf, AsyncReadExt};
 use tokio::io::split;
-
 pub struct TestClient {
     writer: WriteHalf<TcpStream>,
     reader: BufReader<ReadHalf<TcpStream>>,
@@ -16,7 +17,7 @@ impl TestClient {
             reader: BufReader::new(read_half),
         })
     }
-
+    
     pub async fn send(&mut self, msg: &str) -> anyhow::Result<()> {
         self.writer.write_all(msg.as_bytes()).await?;
         self.writer.flush().await?;

@@ -1,13 +1,11 @@
-use std::{cmp::Ordering, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::Mutex;
 
-use serde_json::{Value, to_value};
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct Job {
-    pub id: usize,
     pub priority: usize,
     pub queue: String,
     pub state: JobState,
@@ -29,12 +27,9 @@ pub enum JobState {
     Deleted,
 }
 
-pub type JobRef = Arc<Mutex<Job>>;
-
 impl Job {
-    pub fn new(id: usize, queue: String, value: Value, priority: usize) -> Self {
+    pub fn new(queue: String, value: Value, priority: usize) -> Self {
         Self {
-            id,
             priority,
             queue,
             state: JobState::Ready,

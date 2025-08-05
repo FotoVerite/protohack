@@ -1,7 +1,6 @@
 use prime_time::job_center::{
     Request, Response, handle_jobs_center::handle_job_center, scheduler::manager::JobManager,
 };
-use tracing_test::traced_test;
 use std::sync::{Arc, atomic::AtomicUsize};
 use tokio::net::TcpListener;
 
@@ -40,6 +39,29 @@ async fn recv_response(client: &mut TestClient) -> anyhow::Result<Response> {
     let response_str = client.read_line().await?;
     let response: Response = serde_json::from_str(&response_str)?;
     Ok(response)
+}
+
+async fn put_job_and_get_id(
+    client: &mut TestClient,
+    queue: String,
+    job: serde_json::Value,
+    pri: usize,
+) -> anyhow::Result<usize> {
+    send_request(
+        client,
+        Request::Put {
+            queue,
+            job,
+            pri,
+        },
+    )
+    .await?;
+
+    let response = recv_response(client).await?;
+    match response {
+        Response::Ok { id: Some(id), .. } => Ok(id),
+        _ => Err(anyhow::anyhow!("Unexpected response for put job: {:?}", response)),
+    }
 }
 
 // #[tokio::test]
@@ -129,7 +151,7 @@ async fn test_get_job() {
     .await
     .unwrap();
 
-    let response = recv_response(&mut client).await.unwrap();
+    let _ = recv_response(&mut client).await.unwrap();
    // assert_eq!(response, Response::Ok {id: Some(0), job: Some()});
 }
 
@@ -138,23 +160,27 @@ async fn test_abort_job() {
     let harness = JobCenterHarness::<TestJobServer>::new().await;
     let mut client = TestClient::connect(&harness.endpoint()).await.unwrap();
 
-    // Put a job
+    let job_id = put_job_and_get_id(
+        &mut client,
+        "test".to_string(),
+        serde_json::json!({"data": "job_to_abort"}),
+        1,
+    )
+    .await
+    .unwrap();
+
+    // Get the job to change its state to Given
     send_request(
         &mut client,
-        Request::Put {
-            queue: "test".to_string(),
-            job: serde_json::json!({"data": "job_to_abort"}),
-            pri: 1,
+        Request::Get {
+            queues: vec!["test".to_string()],
+            wait: None,
         },
     )
     .await
     .unwrap();
 
-    let response = recv_response(&mut client).await.unwrap();
-    let job_id = match response {
-        Response::Ok { id: Some(id), .. } => id,
-        _ => panic!("Unexpected response for put job: {:?}", response),
-    };
+    let _response = recv_response(&mut client).await.unwrap();
 
     // Abort the job
     send_request(
@@ -169,12 +195,86 @@ async fn test_abort_job() {
     let response = recv_response(&mut client).await.unwrap();
     assert_eq!(response, Response::Ok { id: None, job: None });
 
-    // Try to get the job again, should be NoJob
+    // Try to get the job again, should be the re-queued job
     send_request(
         &mut client,
         Request::Get {
             queues: vec!["test".to_string()],
             wait: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let response = recv_response(&mut client).await.unwrap();
+    // Assert that the job is retrieved and its ID matches
+    match response {
+        Response::Ok { id: Some(retrieved_id), job: Some(_) } => {
+            assert_eq!(retrieved_id, job_id);
+        },
+        _ => panic!("Expected re-queued job, but got: {:?}", response),
+    }
+}
+
+#[tokio::test]
+async fn test_abort_job_different_client() {
+    let harness = JobCenterHarness::<TestJobServer>::new().await;
+    let mut client1 = TestClient::connect(&harness.endpoint()).await.unwrap();
+    let mut client2 = TestClient::connect(&harness.endpoint()).await.unwrap();
+
+    // Client 1 puts a job
+    let job_id = put_job_and_get_id(
+        &mut client1,
+        "test".to_string(),
+        serde_json::json!({"data": "job_for_client1"}),
+        1,
+    )
+    .await
+    .unwrap();
+
+    // Client 1 gets the job (changes state to Given)
+    send_request(
+        &mut client1,
+        Request::Get {
+            queues: vec!["test".to_string()],
+            wait: None,
+        },
+    )
+    .await
+    .unwrap();
+    let _response = recv_response(&mut client1).await.unwrap();
+
+    // Client 2 attempts to abort the job (should fail)
+    send_request(
+        &mut client2,
+        Request::Abort {
+            id: job_id,
+        },
+    )
+    .await
+    .unwrap();
+
+    let response = recv_response(&mut client2).await.unwrap();
+    // Expect an error because it's a different client
+    match response {
+        Response::Error { .. } => {},
+        _ => panic!("Expected an Error response, but got: {:?}", response),
+    }
+
+    // Verify the job is still with client1 (or re-queued if client1 disconnects)
+    // For this test, we just check that client2 didn't successfully abort it.
+}
+
+#[tokio::test]
+async fn test_abort_non_existent_job() {
+    let harness = JobCenterHarness::<TestJobServer>::new().await;
+    let mut client = TestClient::connect(&harness.endpoint()).await.unwrap();
+
+    // Attempt to abort a non-existent job
+    send_request(
+        &mut client,
+        Request::Abort {
+            id: 9999, // A non-existent ID
         },
     )
     .await

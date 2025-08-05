@@ -1,5 +1,5 @@
 use futures::{SinkExt, StreamExt};
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::net::TcpStream;
 use tokio_util::codec::Framed;
 use tracing::info;
 

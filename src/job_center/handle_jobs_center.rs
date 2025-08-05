@@ -1,16 +1,14 @@
-use std::sync::{atomic::AtomicUsize, Arc};
 
 use futures::StreamExt;
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::{net::TcpStream, sync::mpsc::{self, Sender}};
 use tokio_util::codec::{Framed, LinesCodec};
-use tracing::info;
 
-use crate::job_center::{handle_request::handle_request, handle_response::response_handler, scheduler::manager::JobManager};
+use crate::job_center::{actor_scheduler::actor::JobCommand, handle_request::handle_request, handle_response::response_handler};
+
 
 pub async fn handle_job_center(
     socket: TcpStream,
-    job_storage: JobManager,
-    id_counter: Arc<AtomicUsize>,
+    job_command_sender: Sender<JobCommand>
 ) -> anyhow::Result<()> {
     let addr = socket.peer_addr()?;
 
@@ -23,7 +21,7 @@ pub async fn handle_job_center(
 
     let reader_task = {
         tokio::spawn(async move {
-            handle_request(reader, &addr, job_storage, id_counter, &mut tx).await
+            handle_request(reader, &addr, job_command_sender, &mut tx).await
         })
     };
 

@@ -1,18 +1,15 @@
-use std::net::TcpStream;
 
-use futures::stream::SplitSink;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio_util::codec::{Framed, LinesCodec};
 
-use crate::job_center::scheduler::job::JobPayload;
+use crate::job_center::actor_scheduler::job::JobPayload;
+
 
 pub mod handle_jobs_center;
 mod handle_request;
 mod handle_response;
-pub mod scheduler;
+pub mod actor_scheduler;
 
-type ClientWriter = SplitSink<Framed<TcpStream, LinesCodec>, Response>;
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(tag = "status")]

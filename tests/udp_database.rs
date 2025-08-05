@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::{net::UdpSocket, sync::Mutex, time::timeout};
-use prime_time::database_server::{self, run_udp_server_with_socket};
+use prime_time::database_server::run_udp_server_with_socket;
 use crate::udp_server_harness::{UdpServer, UdpServerHarness};
 
 mod udp_server_harness;

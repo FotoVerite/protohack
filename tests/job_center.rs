@@ -1,8 +1,9 @@
 use prime_time::job_center::{
-    Request, Response, handle_jobs_center::handle_job_center, scheduler::manager::JobManager,
+    actor_scheduler::{actor::JobCommand, manager::JobManager},
+    handle_jobs_center::handle_job_center,
+    Request, Response,
 };
-use std::sync::{Arc, atomic::AtomicUsize};
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::mpsc};
 
 mod job_center_harness;
 mod test_util;
@@ -13,15 +14,20 @@ struct TestJobServer;
 
 impl JobServer for TestJobServer {
     async fn run(listener: TcpListener) -> anyhow::Result<()> {
-        let job_manager = JobManager::new();
-        let id_counter = Arc::new(AtomicUsize::new(0));
+        let (tx, rx) = mpsc::channel::<JobCommand>(32);
+        let mut job_manager = JobManager::new(rx);
+        tokio::spawn(async move {
+            if let Err(e) = job_manager.job_actor().await {
+                tracing::error!("JobManager exited with error: {:?}", e);
+            }
+        });
+
         loop {
             let (socket, _addr) = listener.accept().await?;
-            let job_manager = job_manager.clone();
-            let id_counter = id_counter.clone();
+            let tx_clone = tx.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle_job_center(socket, job_manager, id_counter).await {
-                    eprintln!("Error handling job center connection: {}", e);
+                if let Err(e) = handle_job_center(socket, tx_clone).await {
+                    tracing::error!("Error handling job center connection: {}", e);
                 }
             });
         }
@@ -282,6 +288,90 @@ async fn test_abort_non_existent_job() {
 
     let response = recv_response(&mut client).await.unwrap();
     assert_eq!(response, Response::NoJob {});
+}
+
+#[tokio::test]
+async fn test_delete_job() {
+    let harness = JobCenterHarness::<TestJobServer>::new().await;
+    let mut client = TestClient::connect(&harness.endpoint()).await.unwrap();
+
+    let job_id = put_job_and_get_id(
+        &mut client,
+        "test".to_string(),
+        serde_json::json!({"data": "job_to_delete"}),
+        1,
+    )
+    .await
+    .unwrap();
+
+    // Delete the job
+    send_request(&mut client, Request::Delete { id: job_id })
+        .await
+        .unwrap();
+
+    let response = recv_response(&mut client).await.unwrap();
+    assert_eq!(response, Response::Ok { id: None, job: None });
+
+    // Attempt to delete the same job again
+    send_request(&mut client, Request::Delete { id: job_id })
+        .await
+        .unwrap();
+
+    let response = recv_response(&mut client).await.unwrap();
+    assert_eq!(response, Response::NoJob {});
+}
+
+#[tokio::test]
+async fn test_delete_then_get() {
+    let harness = JobCenterHarness::<TestJobServer>::new().await;
+    let mut client = TestClient::connect(&harness.endpoint()).await.unwrap();
+
+    // Put a high-priority job
+    let job_id_high = put_job_and_get_id(
+        &mut client,
+        "test".to_string(),
+        serde_json::json!({"data": "high_pri"}),
+        10,
+    )
+    .await
+    .unwrap();
+
+    // Put a low-priority job
+    let job_id_low = put_job_and_get_id(
+        &mut client,
+        "test".to_string(),
+        serde_json::json!({"data": "low_pri"}),
+        5,
+    )
+    .await
+    .unwrap();
+
+    // Delete the high-priority job
+    send_request(&mut client, Request::Delete { id: job_id_high })
+        .await
+        .unwrap();
+    let response = recv_response(&mut client).await.unwrap();
+    assert_eq!(response, Response::Ok { id: None, job: None });
+
+    // Get a job from the queue
+    send_request(
+        &mut client,
+        Request::Get {
+            queues: vec!["test".to_string()],
+            wait: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    // We should receive the low-priority job
+    let response = recv_response(&mut client).await.unwrap();
+    match response {
+        Response::Ok { id: Some(id), .. } => {
+            assert_eq!(id, job_id_low);
+        }
+        _ => panic!("Expected to get the low-priority job, but got {:?}", response),
+    }
 }
 
 

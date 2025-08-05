@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use anyhow::{Ok, bail};
+use anyhow::{Ok};
 use serde_json::Value;
 use tokio::sync::oneshot::Sender;
 use tracing::warn;
@@ -54,22 +54,15 @@ impl JobManager {
                     addr,
                     resp,
                 } => self.get_from_queues(&queues, wait, addr, resp),
-                JobCommand::Delete { id, resp } => match self.jobs.get_mut(id) {
-                    None => {
-                        warn!("NO JOB FOUND TO DELETE {id}");
+                JobCommand::Delete { id, resp } => {
+                    if self.jobs.remove(&id).is_some() {
+                        respond(resp, Ok(true));
+                    } else {
                         respond(resp, Ok(false));
                     }
-                    Some(job) => match job.state {
-                        JobState::Deleted => respond(resp, Ok(false)),
-                        _ => {
-                            warn!("MARKING JOB FOR DELETION {id}");
-                            self.mark_job(id);
-                            respond(resp, Ok(true));
-                        }
-                    },
                 },
                 JobCommand::Abort { id, addr, resp } => {
-                    let job_to_add_back = match self.jobs.get_mut(id) {
+                    let job_to_add_back = match self.jobs.get_mut(&id) {
                         None => {
                             respond(resp, Ok(false));
                             None
